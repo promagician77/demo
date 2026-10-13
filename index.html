@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>XRS Kiosk Architecture</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=Fira+Mono:wght@400&display=swap">
+  <style>
+    /* XRS Kiosk — industrial precision: steel navy + copper accent */
+    :root {
+      --bg: #f4f5f7;
+      --bg-alt: #e6eaef;
+      --text: #1a2332;
+      --text-muted: #5e6e82;
+      --primary: #1b3a5c;
+      --primary-lt: #2d6ab0;
+      --accent: #b07328;
+      --accent-lt: #c98a3f;
+      --border: #ced5de;
+      --code-bg: #e9eef3;
+      --code-text: #2c3e50;
+      --ok: #1a7a3f;
+      --warn: #a87209;
+      --err: #b91c1c;
+      --card: #ffffff;
+      --font-d: 'Archivo', system-ui, sans-serif;
+      --font-b: 'Source Sans 3', system-ui, sans-serif;
+      --font-m: 'Fira Mono', 'Courier New', monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #0e1620; --bg-alt: #172030; --text: #dde4eb; --text-muted: #8597a9;
+        --primary: #5fa0d8; --primary-lt: #82bae8; --accent: #d4944a; --accent-lt: #e4aa62;
+        --border: #283848; --code-bg: #152030; --code-text: #c0cbda;
+        --ok: #3dbb6a; --warn: #e0a82e; --err: #f87171; --card: #1a2a3c;
+        color-scheme: dark;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #0e1620; --bg-alt: #172030; --text: #dde4eb; --text-muted: #8597a9;
+      --primary: #5fa0d8; --primary-lt: #82bae8; --accent: #d4944a; --accent-lt: #e4aa62;
+      --border: #283848; --code-bg: #152030; --code-text: #c0cbda;
+      --ok: #3dbb6a; --warn: #e0a82e; --err: #f87171; --card: #1a2a3c;
+      color-scheme: dark;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font-b); font-size: 15px; line-height: 1.65; }
+    img { max-width: 100%; }
+    h2 { font-family: var(--font-d); font-size: 24px; font-weight: 700; margin: 0 0 6px; text-wrap: balance; color: var(--primary); }
+    h3 { font-family: var(--font-d); font-size: 17px; font-weight: 600; margin: 28px 0 10px; text-wrap: balance; }
+    p { margin: 0 0 16px; max-width: 72ch; }
+    strong { font-weight: 600; }
+
+    .page-wrap { max-width: 920px; margin: 0 auto; padding: 0 20px; }
+
+    /* Header */
+    .hdr { background: var(--primary); color: #fff; padding: 28px 20px 22px; text-align: center; }
+    .hdr-label { font-family: var(--font-d); font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.7; margin-bottom: 6px; }
+    .hdr h1 { font-family: var(--font-d); font-size: 26px; font-weight: 700; margin: 0 0 4px; }
+    .hdr-sub { font-size: 13px; opacity: 0.75; }
+
+    /* Tabs */
+    .tab-bar { position: sticky; top: 0; z-index: 10; background: var(--card); border-bottom: 1.5px solid var(--border); display: flex; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .tab-bar::-webkit-scrollbar { display: none; }
+    .tab-btn { flex-shrink: 0; padding: 12px 18px; font-family: var(--font-d); font-size: 13px; font-weight: 500; color: var(--text-muted); border: none; background: none; cursor: pointer; border-bottom: 2.5px solid transparent; transition: color .15s, border-color .15s; }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+    /* Panels */
+    .tab-panel { display: none; padding: 28px 0 40px; }
+    .tab-panel.active { display: block; }
+
+    /* Architecture diagram */
+    .arch-wrap { display: flex; gap: 16px; align-items: flex-start; margin: 20px 0 28px; }
+    .arch-col { flex: 1; min-width: 0; }
+    .arch-col.remote { flex: 0 0 200px; }
+    .arch-label { font-family: var(--font-d); font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; }
+    .arch-row { display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; margin-bottom: 3px; }
+    .arch-box { padding: 9px 10px; border: 1.5px solid var(--primary); border-radius: 5px; text-align: center; font-family: var(--font-d); font-size: 11.5px; font-weight: 500; background: var(--card); color: var(--text); flex: 1; min-width: 80px; }
+    .arch-box.full { flex-basis: 100%; }
+    .arch-box span { display: block; font-size: 9.5px; color: var(--text-muted); margin-top: 2px; font-weight: 400; font-family: var(--font-m); }
+    .arch-box.filled { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .arch-box.hal { background: var(--bg-alt); border-style: dashed; }
+    .arch-box.hw { border-style: dotted; border-color: var(--text-muted); }
+    .arch-box.db { background: var(--bg-alt); border-color: var(--accent); border-width: 2px; }
+    .arch-arrow { text-align: center; color: var(--primary); font-size: 13px; padding: 3px 0; line-height: 1; }
+    .arch-sync { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
+    .arch-sync-inner { writing-mode: vertical-lr; text-orientation: mixed; font-family: var(--font-d); font-size: 10px; font-weight: 600; color: var(--accent); letter-spacing: 0.06em; border-left: 2px dashed var(--accent); padding-left: 8px; }
+
+    /* Commit flow */
+    .flow-scroll { overflow-x: auto; margin: 20px 0 8px; padding-bottom: 8px; }
+    .commit-flow { display: flex; align-items: flex-start; gap: 0; min-width: 700px; }
+    .flow-stage { text-align: center; flex-shrink: 0; }
+    .stage-box { padding: 7px 11px; border-radius: 5px; font-family: var(--font-d); font-size: 10.5px; font-weight: 600; letter-spacing: 0.01em; border: 1.5px solid var(--primary); background: var(--card); color: var(--primary); white-space: nowrap; }
+    .flow-stage.committed .stage-box { border-color: var(--ok); color: var(--ok); }
+    .stage-sub { font-size: 9.5px; color: var(--text-muted); margin-top: 3px; }
+    .flow-arr { color: var(--text-muted); font-size: 15px; padding: 6px 3px 0; flex-shrink: 0; }
+    .commit-pt { text-align: center; flex-shrink: 0; padding: 0 4px; }
+    .commit-badge { background: var(--accent); color: #fff; padding: 7px 14px; border-radius: 5px; font-family: var(--font-d); font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+    .commit-sub { font-size: 9px; color: var(--accent); margin-top: 3px; font-weight: 600; }
+    .flow-note { font-size: 13px; color: var(--text-muted); font-style: italic; margin-top: 6px; }
+
+    /* Tables */
+    .tbl-scroll { overflow-x: auto; margin: 12px 0 20px; }
+    table { border-collapse: collapse; width: 100%; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+    th { font-family: var(--font-d); font-weight: 600; font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; text-align: left; padding: 8px 10px; border-bottom: 2px solid var(--primary); color: var(--primary); }
+    td { padding: 7px 10px; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+    .pass { color: var(--ok); font-weight: 600; font-family: var(--font-d); }
+    .fail { color: var(--err); font-weight: 600; font-family: var(--font-d); }
+
+    /* Calculator */
+    .calc { background: var(--card); border: 1.5px solid var(--border); border-radius: 8px; padding: 20px; margin: 16px 0 24px; max-width: 400px; }
+    .calc label { font-family: var(--font-d); font-size: 12px; font-weight: 600; display: block; margin-bottom: 6px; letter-spacing: 0.02em; }
+    .calc input { width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 5px; font-family: var(--font-m); font-size: 18px; background: var(--bg); color: var(--text); }
+    .calc input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
+    .calc-grid { margin-top: 16px; display: grid; gap: 6px; }
+    .calc-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 14px; }
+    .calc-row span:last-child { font-family: var(--font-m); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .calc-row.hl { background: var(--bg-alt); margin: 4px -10px; padding: 8px 10px; border-radius: 4px; font-size: 16px; }
+    .calc-row.hl span:last-child { color: var(--accent); font-size: 18px; }
+    .calc-sep { border-top: 1px solid var(--border); margin: 4px 0; }
+
+    /* Code */
+    pre.code { background: var(--code-bg); color: var(--code-text); font-family: var(--font-m); font-size: 12.5px; line-height: 1.7; padding: 18px; border-radius: 6px; overflow-x: auto; margin: 10px 0 24px; border: 1px solid var(--border); }
+    pre.code .cm { color: var(--text-muted); font-style: italic; }
+
+    /* Callout */
+    .callout { background: var(--bg-alt); border-left: 3px solid var(--accent); padding: 12px 16px; border-radius: 0 6px 6px 0; font-size: 13.5px; margin: 16px 0 20px; }
+
+    /* State grid */
+    .state-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; margin: 12px 0 20px; }
+    .state-card { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 10px 14px; }
+    .state-card .s-name { font-family: var(--font-m); font-size: 12px; font-weight: 600; color: var(--primary); }
+    .state-card .s-desc { font-size: 13px; margin-top: 3px; color: var(--text-muted); }
+    .state-card.s-fail { border-left: 3px solid var(--err); }
+    .state-card.s-ok { border-left: 3px solid var(--ok); }
+    .state-card.s-warn { border-left: 3px solid var(--warn); }
+
+    /* Footer */
+    .ftr { text-align: center; padding: 32px 20px 16px; font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--border); margin-top: 20px; }
+
+    @media (max-width: 700px) {
+      .arch-wrap { flex-direction: column; }
+      .arch-col.remote { flex-basis: auto; }
+      .arch-sync { padding: 8px 0; }
+      .arch-sync-inner { writing-mode: horizontal-tb; border-left: none; border-top: 2px dashed var(--accent); padding-left: 0; padding-top: 6px; }
+      .hdr h1 { font-size: 22px; }
+      .tab-btn { padding: 10px 14px; font-size: 12px; }
+      .state-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="hdr-label">Software Architecture Proposal</div>
+  <h1>XRS Coin Redemption Kiosk</h1>
+  <div class="hdr-sub">Prepared for XRS Conglomerate LLC &middot; October 2026</div>
+</div>
+
+<nav class="tab-bar">
+  <button class="tab-btn active" data-tab="tab-arch">Architecture</button>
+  <button class="tab-btn" data-tab="tab-txn">Transaction Engine</button>
+  <button class="tab-btn" data-tab="tab-fee">Fee Engine</button>
+  <button class="tab-btn" data-tab="tab-hw">Hardware &amp; Sorting</button>
+  <button class="tab-btn" data-tab="tab-code">Code Reference</button>
+</nav>
+
+<div class="page-wrap">
+
+<!-- ============ ARCHITECTURE ============ -->
+<section id="tab-arch" class="tab-panel active">
+  <h2>System Architecture</h2>
+  <p>Four-layer modular architecture isolating the customer UI from hardware specifics. All critical transaction processing is local. Remote connectivity handles administration and fleet sync only &mdash; never required to complete a payout.</p>
+
+  <div class="arch-wrap">
+    <div class="arch-col">
+      <div class="arch-label">Kiosk (local)</div>
+      <div class="arch-row"><div class="arch-box full filled">Customer Touchscreen (Qt 6 / QML)</div></div>
+      <div class="arch-arrow">&#9660;</div>
+      <div class="arch-row">
+        <div class="arch-box">Transaction<br>Engine</div>
+        <div class="arch-box">Fee<br>Calculator</div>
+        <div class="arch-box">Inventory<br>Manager</div>
+        <div class="arch-box">Receipt<br>Generator</div>
+        <div class="arch-box">Sync<br>Agent</div>
+      </div>
+      <div class="arch-arrow">&#9660;</div>
+      <div class="arch-row"><div class="arch-box full hal">Hardware Abstraction Layer</div></div>
+      <div class="arch-arrow">&#9660;</div>
+      <div class="arch-row">
+        <div class="arch-box hw">Counter<span>RS-232</span></div>
+        <div class="arch-box hw">Scale<span>RS-232</span></div>
+        <div class="arch-box hw">Sorter<span>GPIO</span></div>
+        <div class="arch-box hw">Dispenser<span>RS-232</span></div>
+        <div class="arch-box hw">Printer<span>USB</span></div>
+        <div class="arch-box hw">Sensors<span>GPIO</span></div>
+      </div>
+      <div class="arch-arrow">&#9660;</div>
+      <div class="arch-row"><div class="arch-box full db">SQLite WAL &mdash; Local Transaction Ledger</div></div>
+    </div>
+
+    <div class="arch-sync"><div class="arch-sync-inner">TLS 1.3 / Idempotent Sync</div></div>
+
+    <div class="arch-col remote">
+      <div class="arch-label">Remote</div>
+      <div class="arch-row"><div class="arch-box full filled">Admin Dashboard</div></div>
+      <div class="arch-arrow">&#9660;</div>
+      <div class="arch-row"><div class="arch-box full">API Server</div></div>
+      <div class="arch-arrow">&#9660;</div>
+      <div class="arch-row"><div class="arch-box full db">PostgreSQL</div></div>
+    </div>
+  </div>
+
+  <h3>Recommended Stack</h3>
+  <div class="tbl-scroll">
+  <table>
+    <tr><th>Layer</th><th>Technology</th><th>Rationale</th></tr>
+    <tr><td>Kiosk OS</td><td>Ubuntu 22.04 LTS (embedded)</td><td>Long-term support, hardened, kiosk-mode lockdown</td></tr>
+    <tr><td>Touchscreen app</td><td>Qt 6 / QML + Python</td><td>Native touch performance, offline-first, no browser dependency</td></tr>
+    <tr><td>Transaction engine</td><td>Python 3.12</td><td>Type-safe, broad hardware library ecosystem</td></tr>
+    <tr><td>Local database</td><td>SQLite 3 with WAL mode</td><td>Crash-safe, zero-config, embeddable</td></tr>
+    <tr><td>Hardware comm</td><td>pyserial + libgpiod</td><td>Standard RS-232/GPIO interfaces</td></tr>
+    <tr><td>Admin dashboard</td><td>React + FastAPI + PostgreSQL</td><td>Web-based, multi-kiosk, role-based access</td></tr>
+    <tr><td>Sync protocol</td><td>REST over TLS 1.3</td><td>Idempotent, replay-safe, offline-resilient</td></tr>
+  </table>
+  </div>
+
+  <h3>Key Architecture Decisions</h3>
+  <div class="callout">
+    <strong>Offline-first:</strong> Every transaction commits locally before any network call. Sync is asynchronous with monotonic IDs and conflict-free merge &mdash; a 72-hour outage loses zero transactions.<br><br>
+    <strong>Hardware abstraction:</strong> Each device (counter, scale, sorter, dispenser, printer) sits behind a protocol adapter. Swap a Telequip counter for a Scan Coin unit by changing one config file &mdash; zero code changes.<br><br>
+    <strong>Transaction journaling:</strong> Every state transition writes to the WAL before the transition executes. Power loss mid-dispense recovers to the exact bill count on reboot.<br><br>
+    <strong>Integer arithmetic:</strong> All monetary calculations use integer cents (uint64). No floating-point value ever touches the fee engine or the ledger.
+  </div>
+</section>
+
+<!-- ============ TRANSACTION ENGINE ============ -->
+<section id="tab-txn" class="tab-panel">
+  <h2>Transaction Engine</h2>
+
+  <h3>Two-Stage Commit Protocol</h3>
+  <p>The critical constraint: once coins are sorted into denomination bins, they mix with previous transactions and cannot be returned to a specific customer. Sorting is irreversible. The system therefore holds all coins in escrow until the cash dispenser confirms the full payout. Only then do the sorting gates fire.</p>
+
+  <div class="flow-scroll">
+    <div class="commit-flow">
+      <div class="flow-stage"><div class="stage-box">DEPOSIT</div><div class="stage-sub">Escrow</div></div>
+      <div class="flow-arr">&rarr;</div>
+      <div class="flow-stage"><div class="stage-box">COUNT</div><div class="stage-sub">Escrow</div></div>
+      <div class="flow-arr">&rarr;</div>
+      <div class="flow-stage"><div class="stage-box">WEIGH</div><div class="stage-sub">Escrow</div></div>
+      <div class="flow-arr">&rarr;</div>
+      <div class="flow-stage"><div class="stage-box">CONFIRM</div><div class="stage-sub">Escrow</div></div>
+      <div class="flow-arr">&rarr;</div>
+      <div class="flow-stage"><div class="stage-box">DISPENSE</div><div class="stage-sub">Escrow</div></div>
+      <div class="flow-arr">&rarr;</div>
+      <div class="commit-pt"><div class="commit-badge">Commit</div><div class="commit-sub">Point of no return</div></div>
+      <div class="flow-arr">&rarr;</div>
+      <div class="flow-stage committed"><div class="stage-box">SORT</div><div class="stage-sub">Committed</div></div>
+      <div class="flow-arr">&rarr;</div>
+      <div class="flow-stage committed"><div class="stage-box">COMPLETE</div><div class="stage-sub">Done</div></div>
+    </div>
+  </div>
+  <p class="flow-note">Before the commit point, every failure path returns coins from escrow. After it, coins are in bins and cash has been dispensed.</p>
+
+  <h3>Transaction States</h3>
+  <div class="state-grid">
+    <div class="state-card"><div class="s-name">IDLE</div><div class="s-desc">Waiting for customer. Welcome screen displayed.</div></div>
+    <div class="state-card"><div class="s-name">DEPOSITING</div><div class="s-desc">Customer feeding coins. Real-time count on screen. Coins held in escrow.</div></div>
+    <div class="state-card"><div class="s-name">COUNTING</div><div class="s-desc">Hardware identifying denominations. Rejected coins reported to customer.</div></div>
+    <div class="state-card"><div class="s-name">VALIDATING</div><div class="s-desc">Checking minimums, dispenser capacity, fee calculation.</div></div>
+    <div class="state-card"><div class="s-name">AWAITING_CONFIRMATION</div><div class="s-desc">Review screen shown. Customer confirms or cancels.</div></div>
+    <div class="state-card s-warn"><div class="s-name">DISPENSING</div><div class="s-desc">Bills being dispensed. Each bill confirmed individually. Coins still in escrow.</div></div>
+    <div class="state-card s-warn"><div class="s-name">VERIFYING_PAYOUT</div><div class="s-desc">Final bill count verified against expected. WAL entry written.</div></div>
+    <div class="state-card s-ok"><div class="s-name">COLLECTING_COINS</div><div class="s-desc">Sorting gates fire. Coins directed to denomination compartments by weight/type.</div></div>
+    <div class="state-card s-ok"><div class="s-name">COMPLETED</div><div class="s-desc">Receipt printed. Transaction sealed in ledger. Return to IDLE.</div></div>
+    <div class="state-card s-fail"><div class="s-name">CANCELED</div><div class="s-desc">Customer canceled or minimum not met. All coins returned from escrow.</div></div>
+    <div class="state-card s-fail"><div class="s-name">FAILED</div><div class="s-desc">Hardware error before commit. Coins returned. Error logged with code.</div></div>
+    <div class="state-card s-fail"><div class="s-name">RECOVERY_REQUIRED</div><div class="s-desc">Failure during or after dispense. Machine suspended. Admin notified. Manual reconciliation.</div></div>
+  </div>
+
+  <h3>Recovery Protocol</h3>
+  <div class="tbl-scroll">
+  <table>
+    <tr><th>Failure point</th><th>Coins</th><th>Cash</th><th>Action</th></tr>
+    <tr><td>Before DISPENSING</td><td>Return from escrow</td><td>Not dispensed</td><td>Automatic recovery. Customer gets coins back.</td></tr>
+    <tr><td>During DISPENSING (partial)</td><td>Hold in escrow</td><td>Partial delivery</td><td>Stop dispensing. Log confirmed bill count. Flag for reconciliation. Admin notified.</td></tr>
+    <tr><td>After DISPENSING, before SORT</td><td>Hold in escrow</td><td>Fully dispensed</td><td>Proceed to sort on reboot. WAL replay confirms payout was complete.</td></tr>
+    <tr><td>Power loss at any state</td><td>Per WAL state</td><td>Per WAL state</td><td>Reboot reads last durable state. Resume or roll back based on evidence.</td></tr>
+  </table>
+  </div>
+</section>
+
+<!-- ============ FEE ENGINE ============ -->
+<section id="tab-fee" class="tab-panel">
+  <h2>Fee Calculation Engine</h2>
+  <p>All monetary operations use integer-cent arithmetic. The fee percentage is configurable from the admin dashboard with audit-logged changes. Fee changes never affect transactions already in progress.</p>
+
+  <h3>Interactive Calculator</h3>
+  <div class="calc">
+    <label for="coinInput">Coin deposit value ($)</label>
+    <input type="number" id="coinInput" step="0.01" min="0" value="25.75">
+    <div class="calc-grid">
+      <div class="calc-row"><span>Total coin value</span><span id="r-total">$25.75</span></div>
+      <div class="calc-row"><span>Service fee (20%)</span><span id="r-fee">$5.15</span></div>
+      <div class="calc-row"><span>Rounding fee</span><span id="r-round">$0.60</span></div>
+      <div class="calc-sep"></div>
+      <div class="calc-row hl"><span>Cash payout</span><span id="r-payout">$20.00</span></div>
+      <div class="calc-row"><span>$1 bills dispensed</span><span id="r-bills">20</span></div>
+      <div class="calc-row"><span>Total operator revenue</span><span id="r-rev">$5.75</span></div>
+    </div>
+  </div>
+
+  <h3>SOW Verification</h3>
+  <p>All six examples from the statement of work, verified against the integer-cent engine:</p>
+  <div class="tbl-scroll">
+  <table>
+    <thead><tr><th>Deposit</th><th>20% Fee</th><th>Rounding</th><th>Payout</th><th>Status</th></tr></thead>
+    <tbody id="verifyBody"></tbody>
+  </table>
+  </div>
+
+  <h3>Formula (integer cents)</h3>
+  <div class="callout">
+    <strong>A</strong> = total coin value in cents<br>
+    <strong>B</strong> = floor((A &times; P + 50) / 100) &mdash; half-up rounded service fee<br>
+    <strong>C</strong> = A &minus; B &mdash; balance after fee<br>
+    <strong>E</strong> = floor(C / 100) &times; 100 &mdash; payout (rounded down to whole dollar)<br>
+    <strong>D</strong> = C &minus; E &mdash; additional rounding fee<br><br>
+    No floating-point value appears at any step. The ledger stores A, B, D, E independently. Fee changes are never applied retroactively.
+  </div>
+</section>
+
+<!-- ============ HARDWARE & SORTING ============ -->
+<section id="tab-hw" class="tab-panel">
+  <h2>Hardware Integration &amp; Coin Sorting</h2>
+  <p>Every physical device sits behind a protocol adapter in the hardware abstraction layer. The adapter translates manufacturer-specific serial frames into a common interface. Swapping a device means writing one adapter class and updating a config file.</p>
+
+  <h3>Device Interfaces</h3>
+  <div class="tbl-scroll">
+  <table>
+    <tr><th>Device</th><th>Interface</th><th>Example Hardware</th><th>Protocol Details</th></tr>
+    <tr><td>Coin counter</td><td>RS-232</td><td>Telequip Galileo</td><td>Binary framing, 9600 baud, ENQ/ACK handshake</td></tr>
+    <tr><td>Precision scale</td><td>RS-232</td><td>Ohaus Scout STX</td><td>ASCII response, 0.01g resolution, 200ms settle</td></tr>
+    <tr><td>Sorting gates</td><td>GPIO</td><td>Custom solenoid array</td><td>Active-high, 50ms pulse width, one gate per compartment</td></tr>
+    <tr><td>Bill dispenser</td><td>RS-232</td><td>Fujitsu F56</td><td>F56 binary protocol, per-bill confirmation, 2000-note cassette</td></tr>
+    <tr><td>Thermal printer</td><td>USB</td><td>Epson TM-T88VII</td><td>ESC/POS command set, 80mm paper, auto-cutter</td></tr>
+    <tr><td>Cabinet sensors</td><td>GPIO</td><td>Magnetic door, vibration, tilt</td><td>Interrupt-driven, tamper events logged immediately</td></tr>
+  </table>
+  </div>
+
+  <h3>Penny Classification</h3>
+  <p>US pennies minted before 1982 are 95% copper and weigh 3.11g. Post-1982 pennies are copper-plated zinc at 2.50g. The 2.90g threshold sits cleanly between these two populations with no overlap in undamaged coins.</p>
+
+  <div class="tbl-scroll">
+  <table>
+    <tr><th>Coin</th><th>Weight</th><th>Classification</th><th>Compartment</th></tr>
+    <tr><td>Penny &gt; 2.90g</td><td>~3.11g (copper)</td><td>Heavy penny</td><td>A &mdash; shared with nickels</td></tr>
+    <tr><td>Penny &le; 2.90g</td><td>~2.50g (zinc)</td><td>Lightweight penny</td><td>B &mdash; separate</td></tr>
+    <tr><td>Nickel</td><td>5.00g</td><td>Nickel</td><td>A &mdash; shared with heavy pennies</td></tr>
+    <tr><td>Dime</td><td>2.27g</td><td>Dime</td><td>C</td></tr>
+    <tr><td>Quarter</td><td>5.67g</td><td>Quarter</td><td>D</td></tr>
+    <tr><td>Half dollar</td><td>11.34g</td><td>Half dollar</td><td>E</td></tr>
+    <tr><td>Dollar coin</td><td>8.10g</td><td>Dollar coin</td><td>F</td></tr>
+  </table>
+  </div>
+
+  <div class="callout">
+    <strong>Uncertain measurements:</strong> Coins weighing within 0.05g of the 2.90g threshold trigger automatic re-weighing. If the second reading is still within tolerance, the coin is rejected and returned to the customer. The threshold is adjustable from the admin dashboard, with the previous value, new value, administrator identity, and timestamp written to an immutable audit log.
+  </div>
+
+  <h3>Compartment Inventory</h3>
+  <p>Nickels and heavy pennies share Compartment A physically but carry independent electronic counts. The admin dashboard shows both the face value per compartment and the breakdown by denomination. Coin removal during servicing requires authenticated access and creates an audit-logged inventory adjustment.</p>
+</section>
+
+<!-- ============ CODE REFERENCE ============ -->
+<section id="tab-code" class="tab-panel">
+  <h2>Code Reference</h2>
+  <p>Core modules in Python 3.12 with strict type annotations. All financial calculations use integer cents.</p>
+
+  <h3>Fee Calculator</h3>
+<pre class="code"><code>from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class FeeResult:
+    deposit_cents: int
+    service_fee_cents: int
+    rounding_fee_cents: int
+    payout_cents: int
+    bills: int
+
+class FeeCalculator:
+    def __init__(self, fee_pct: int = 20):
+        self.fee_pct = fee_pct
+
+    @property
+    def min_deposit_cents(self) -&gt; int:
+        <span class="cm"># smallest deposit that yields at least $1 payout</span>
+        for a in range(1, 100_000):
+            if self.calculate(a).payout_cents &gt;= 100:
+                return a
+        return 100_000
+
+    def calculate(self, deposit_cents: int) -&gt; FeeResult:
+        <span class="cm"># integer-only half-up rounding</span>
+        service = (deposit_cents * self.fee_pct + 50) // 100
+        after = deposit_cents - service
+        payout = (after // 100) * 100
+        rounding = after - payout
+        return FeeResult(
+            deposit_cents=deposit_cents,
+            service_fee_cents=service,
+            rounding_fee_cents=rounding,
+            payout_cents=payout,
+            bills=payout // 100,
+        )</code></pre>
+
+  <h3>Transaction State Machine</h3>
+<pre class="code"><code>from enum import Enum, auto
+from typing import Optional
+
+class TxState(Enum):
+    IDLE = auto()
+    DEPOSITING = auto()
+    COUNTING = auto()
+    VALIDATING = auto()
+    AWAITING_CONFIRMATION = auto()
+    DISPENSING = auto()
+    VERIFYING_PAYOUT = auto()
+    COLLECTING_COINS = auto()
+    COMPLETED = auto()
+    CANCELED = auto()
+    FAILED = auto()
+    RECOVERY_REQUIRED = auto()
+
+TRANSITIONS: dict[TxState, set[TxState]] = {
+    TxState.IDLE: {TxState.DEPOSITING},
+    TxState.DEPOSITING: {TxState.COUNTING, TxState.CANCELED},
+    TxState.COUNTING: {TxState.VALIDATING, TxState.FAILED},
+    TxState.VALIDATING: {TxState.AWAITING_CONFIRMATION, TxState.CANCELED},
+    TxState.AWAITING_CONFIRMATION: {TxState.DISPENSING, TxState.CANCELED},
+    TxState.DISPENSING: {TxState.VERIFYING_PAYOUT, TxState.RECOVERY_REQUIRED},
+    TxState.VERIFYING_PAYOUT: {TxState.COLLECTING_COINS, TxState.RECOVERY_REQUIRED},
+    TxState.COLLECTING_COINS: {TxState.COMPLETED, TxState.RECOVERY_REQUIRED},
+}
+
+class TransactionEngine:
+    def __init__(self, wal: 'WriteAheadLog'):
+        self.state = TxState.IDLE
+        self.wal = wal
+        self.tx_id: Optional[str] = None
+
+    def transition(self, target: TxState) -&gt; None:
+        allowed = TRANSITIONS.get(self.state, set())
+        if target not in allowed:
+            raise InvalidTransition(self.state, target)
+        <span class="cm"># WAL write BEFORE state change — survives power loss</span>
+        self.wal.write(self.tx_id, self.state, target)
+        self.state = target</code></pre>
+
+  <h3>Hardware Abstraction Port</h3>
+<pre class="code"><code>from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Optional
+
+@dataclass
+class CoinReading:
+    denomination: str
+    value_cents: int
+    weight_grams: float
+    accepted: bool
+
+class CoinCounterPort(ABC):
+    """Device-agnostic interface for coin counting hardware."""
+
+    @abstractmethod
+    def connect(self, config: dict) -&gt; None: ...
+
+    @abstractmethod
+    def start_session(self) -&gt; None: ...
+
+    @abstractmethod
+    def poll_coin(self) -&gt; Optional[CoinReading]: ...
+
+    @abstractmethod
+    def stop_session(self) -&gt; None: ...
+
+    @abstractmethod
+    def status(self) -&gt; 'DeviceStatus': ...
+
+class TelequipGalileoAdapter(CoinCounterPort):
+    """RS-232 adapter for Telequip Galileo coin counters."""
+
+    BAUD = 9600
+    ENQ = b'\x02\x01\x03'
+    ACK = 0x06
+
+    def connect(self, config: dict) -&gt; None:
+        import serial
+        self._ser = serial.Serial(config['port'], self.BAUD, timeout=1)
+        self._ser.write(self.ENQ)
+        resp = self._ser.read(1)
+        if not resp or resp[0] != self.ACK:
+            raise DeviceError('Telequip: no ACK on connect')</code></pre>
+</section>
+
+</div>
+
+<footer class="ftr">
+  Prepared by Lucas &middot; Senior Systems Engineer<br>
+  Confidential &mdash; prepared exclusively for XRS Conglomerate LLC
+</footer>
+
+<script>
+document.querySelectorAll('.tab-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+    document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+    try { localStorage.setItem('xrs-tab', btn.dataset.tab); } catch(e) {}
+  });
+});
+try {
+  var saved = localStorage.getItem('xrs-tab');
+  if (saved && document.getElementById(saved)) {
+    document.querySelectorAll('.tab-btn').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.tab === saved);
+    });
+    document.querySelectorAll('.tab-panel').forEach(function(p) {
+      p.classList.toggle('active', p.id === saved);
+    });
+  }
+} catch(e) {}
+
+function calcFee(depositDollars) {
+  var cents = Math.round(depositDollars * 100);
+  var fee = Math.floor((cents * 20 + 50) / 100);
+  var after = cents - fee;
+  var payout = Math.floor(after / 100) * 100;
+  var rounding = after - payout;
+  return { total: cents, fee: fee, rounding: rounding, payout: payout, bills: payout / 100, rev: fee + rounding };
+}
+
+function fmt(c) { return '$' + (c / 100).toFixed(2); }
+
+var inp = document.getElementById('coinInput');
+function update() {
+  var v = parseFloat(inp.value) || 0;
+  var r = calcFee(v);
+  document.getElementById('r-total').textContent = fmt(r.total);
+  document.getElementById('r-fee').textContent = fmt(r.fee);
+  document.getElementById('r-round').textContent = fmt(r.rounding);
+  document.getElementById('r-payout').textContent = fmt(r.payout);
+  document.getElementById('r-bills').textContent = r.bills;
+  document.getElementById('r-rev').textContent = fmt(r.rev);
+}
+inp.addEventListener('input', update);
+
+var SOW = [
+  { d: 1.25, f: 25, rn: 0, p: 100 },
+  { d: 1.99, f: 40, rn: 59, p: 100 },
+  { d: 10.00, f: 200, rn: 0, p: 800 },
+  { d: 25.75, f: 515, rn: 60, p: 2000 },
+  { d: 100.00, f: 2000, rn: 0, p: 8000 },
+  { d: 127.49, f: 2550, rn: 99, p: 10100 }
+];
+
+var tbody = document.getElementById('verifyBody');
+SOW.forEach(function(t) {
+  var r = calcFee(t.d);
+  var ok = r.fee === t.f && r.rounding === t.rn && r.payout === t.p;
+  var tr = document.createElement('tr');
+  tr.innerHTML = '<td>' + fmt(Math.round(t.d * 100)) + '</td><td>' + fmt(r.fee) + '</td><td>' + fmt(r.rounding) + '</td><td>' + fmt(r.payout) + '</td><td class="' + (ok ? 'pass' : 'fail') + '">' + (ok ? 'PASS' : 'FAIL') + '</td>';
+  tbody.appendChild(tr);
+});
+
+update();
+</script>
+
+</body>
+</html>
